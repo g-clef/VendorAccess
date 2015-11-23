@@ -9,6 +9,9 @@
 # requires: requests and lxml libraries that aren't in the python
 #           standard library
 #
+# applies to MIR 2.5 (controller version 2.3.15)
+#    Will update for MIR 3.0/HX in the future.
+#
 # Copyright (c) 2015 United States Government/National Institutes of Health
 # Author: Aaron Gee-Clough
 #
