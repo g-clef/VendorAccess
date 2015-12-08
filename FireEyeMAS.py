@@ -7,10 +7,6 @@
 #
 # FireEye API
 #
-#######################
-#
-# FireEye API
-#
 # requires: requests, IPy and lxml libraries that aren't in the python
 #           standard library
 #
