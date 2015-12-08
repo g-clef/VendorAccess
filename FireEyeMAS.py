@@ -7,6 +7,10 @@
 #
 # FireEye API
 #
+#######################
+#
+# FireEye API
+#
 # requires: requests, IPy and lxml libraries that aren't in the python
 #           standard library
 #
@@ -33,7 +37,6 @@
 #
 #
 #####################
-
 
 import requests
 import datetime
@@ -196,10 +199,11 @@ class FireEyeResponse(object):
 
 
 class FireEyeServer(object):
-    def __init__(self, server,
+    def __init__(self,
+                 server,
                  username,
                  password,
-                 apiVersion="v1.0.0",
+                 apiVersion,
                  partnerToken=None,
                  responseContentType="application/json",
                  autoParseResponses=True,
@@ -264,13 +268,13 @@ class FireEyeServer(object):
                             "autoparse set to True, but not json or xml")
         return data
 
-    def __makeReponseObj(self, xml=None, json=None):
-        if not (xml or json):
+    def __makeReponseObj(self, xmldata=None, jsondata=None):
+        if not (xmldata or jsondata):
             raise Exception("need xml or json")
-        elif xml:
-            returnObj = FireEyeResponse(xmlObj=xml)
-        elif json:
-            returnObj = FireEyeResponse(jsonObj=json)
+        elif xmldata:
+            returnObj = FireEyeResponse(xmlObj=xmldata)
+        elif jsondata:
+            returnObj = FireEyeResponse(jsonObj=jsondata)
         else:
             raise Exception("???")
         return returnObj
@@ -460,7 +464,7 @@ class FireEyeServer(object):
         url = self._buildURL("submissions/results/%s" % submissionID)
         response = self._doGetRequest(url)
         data = self._parseResponse(response)
-        responseObj = self.__makeReponseObj(json=data)
+        responseObj = self.__makeReponseObj(jsondata=data)
         return responseObj
 
     @checkLoggedIn
@@ -470,6 +474,38 @@ class FireEyeServer(object):
         return response.text
 
     @checkLoggedIn
+    def submitFile(self,
+                   fileHandle,
+                   file_name,
+                   profiles,
+                   analysis_type,
+                   force,
+                   timeout,
+                   application,
+                   prefetch,
+                   priority):
+        raise NotImplementedError
+
+
+class FireEyeServerv100(FireEyeServer):
+    def __init__(self,
+                 server,
+                 username,
+                 password,
+                 partnerToken=None,
+                 responseContentType="application/json",
+                 autoParseResponses=True,
+                 verifySSL=True
+                 ):
+        super(FireEyeServerv100, self).__init__(server,
+                                                username,
+                                                password,
+                                                "v1.0.0",
+                                                partnerToken,
+                                                responseContentType,
+                                                autoParseResponses,
+                                                verifySSL)
+
     def submitFile(self,
                    fileHandle,
                    file_name,
@@ -490,7 +526,7 @@ class FireEyeServer(object):
         if prefetch not in (0, 1):
             raise Exception("prefetch must be 0 (for false) or 1 (for true)")
         if priority not in (0, 1):
-            raise Exception("priority must be 0 (for normal/low) or 1 (for high)")
+            raise Exception("priority must be 0 (for normal) or 1 (for high)")
         testType("profiles", profiles, list)
         for profile in profiles:
             if profile not in valid_profiles:
@@ -510,4 +546,75 @@ class FireEyeServer(object):
         options = {"options": json.dumps(data)}
         files = {"filename": (file_name, fileHandle)}
         response = self._doPostRequest(url, data=options, files=files)
+        return response
+
+
+class FireEyeServerv110(FireEyeServer):
+    def __init__(self,
+                 server,
+                 username,
+                 password,
+                 partnerToken=None,
+                 responseContentType="application/json",
+                 autoParseResponses=True,
+                 verifySSL=True
+                 ):
+        super(FireEyeServerv110, self).__init__(server,
+                                                username,
+                                                password,
+                                                "v1.1.0",
+                                                partnerToken,
+                                                responseContentType,
+                                                autoParseResponses,
+                                                verifySSL)
+
+    def submitFile(self,
+                   fileHandle,
+                   file_name,
+                   profiles,
+                   analysis_type=2,
+                   force="false",
+                   timeout=500,
+                   application=-1,
+                   prefetch=1,
+                   priority=0):
+        # I don't like hardcoding 0 or 1, but that's what the API is
+        # looking for.
+        if analysis_type not in (1, 2):
+            raise Exception("analysis_type must be 1 (for live) or 2"
+                            " (for sandbox)")
+        if force not in ("false", "true"):
+            raise Exception("force must be \"false\" or \"true\"")
+        if prefetch not in (0, 1):
+            raise Exception("prefetch must be 0 (for false) or 1 (for true)")
+        if priority not in (0, 1):
+            raise Exception("priority must be 0 (for normal) or 1 (for high)")
+        testType("profiles", profiles, list)
+        for profile in profiles:
+            if profile not in valid_profiles:
+                raise Exception("profile must be one of: %s" % valid_profiles)
+        testType("application", application, int)
+        url = self._buildURL("submissions")
+        # just in case, rewind the filehandle to the top of the file.
+        fileHandle.seek(0)
+        # for reasons I don't understand, the API wants all numbers
+        # as strings in the json that's sent.
+        data = {"analysistype": str(analysis_type),
+                "profiles": profiles,
+                "force": str(force),
+                "timeout": str(timeout),
+                "application": str(application),
+                "prefetch": str(prefetch),
+                "priority": str(priority)
+                }
+        files = {"options": ("", json.dumps(data), "application/json"),
+                 # I really don't like doing it this way, but I'm running into
+                 # a problem with Django, where I'm using this library,
+                 # where the fileHandle read in a submitted file ends up
+                 # being read as empty. So, the submitted file to Fireeye
+                 # is an empty file. Having requests treat them both
+                 # as strings fixed that, but I really dislike this.
+                 "filename": (file_name, fileHandle.read())
+                 }
+        response = self._doPostRequest(url, files=files)
         return response
